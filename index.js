@@ -21,15 +21,19 @@ const Image = function Image(src, opts, upload) {
 };
 
 Image.prototype.start = function start(cb) {
-  auto({
-    metadata: this.getMetadata.bind(this, this.src),
-    dest: this.getDest.bind(this),
-    versions: ['metadata', this.resizeVersions.bind(this)],
-    uploads: ['versions', 'dest', this.uploadVersions.bind(this)],
-    cleanup: ['uploads', this.removeVersions.bind(this)],
-  }, (err, results) => {
-    cb(err, results.uploads, results.metadata);
-  });
+  try {
+    auto({
+      metadata: this.getMetadata.bind(this, this.src),
+      dest: this.getDest.bind(this),
+      versions: ['metadata', this.resizeVersions.bind(this)],
+      uploads: ['versions', 'dest', this.uploadVersions.bind(this)],
+      cleanup: ['uploads', this.removeVersions.bind(this)],
+    }, (err, results) => {
+      cb(err, results.uploads, results.metadata);
+    });
+  } catch (e) {
+    cb(e, null);
+  }
 };
 
 Image.prototype.getMetadata = function getMetadata(src, cb) {
@@ -83,39 +87,43 @@ Image.prototype.removeVersions = function removeVersions(results, cb) {
 };
 
 Image.prototype._upload = function _upload(dest, version, cb) {
-  if (version.awsImageAcl == null) {
-    version.awsImageAcl = this.upload.opts.aws.acl;
-  }
-
-  const format = extname(version.path).substr(1).toLowerCase();
-
-  const options = {
-    Key: `${dest}${version.suffix || ''}.${format}`,
-    ACL: version.awsImageAcl,
-    Body: fs.createReadStream(version.path),
-    ContentType: `image/${format === 'jpg' ? 'jpeg' : format}`,
-  };
-
-  if (version.awsImageExpires) {
-    options.Expires = new Date(Date.now() + version.awsImageExpires);
-  }
-
-  if (version.awsImageMaxAge) {
-    options.CacheControl = `public, max-age=${version.awsImageMaxAge}`;
-  }
-
-  this.upload.s3.putObject(options, (err, data) => {
-    if (err) { return cb(err); }
-
-    version.etag = data.ETag;
-    version.key = options.Key;
-
-    if (this.upload.opts.url) {
-      version.url = this.upload.opts.url + options.Key;
+  try {
+    if (version.awsImageAcl == null) {
+      version.awsImageAcl = this.upload.opts.aws.acl;
     }
 
-    return cb(null, version);
-  });
+    const format = extname(version.path).substr(1).toLowerCase();
+
+    const options = {
+      Key: `${dest}${version.suffix || ''}.${format}`,
+      ACL: version.awsImageAcl,
+      Body: fs.createReadStream(version.path),
+      ContentType: `image/${format === 'jpg' ? 'jpeg' : format}`,
+    };
+
+    if (version.awsImageExpires) {
+      options.Expires = new Date(Date.now() + version.awsImageExpires);
+    }
+
+    if (version.awsImageMaxAge) {
+      options.CacheControl = `public, max-age=${version.awsImageMaxAge}`;
+    }
+
+    this.upload.s3.putObject(options, (err, data) => {
+      if (err) { return cb(err); }
+
+      version.etag = data.ETag;
+      version.key = options.Key;
+
+      if (this.upload.opts.url) {
+        version.url = this.upload.opts.url + options.Key;
+      }
+
+      return cb(null, version);
+    });
+  } catch (e) {
+    cb(e, null);
+  }
 };
 
 const Upload = function Upload(bucketName, opts) {
@@ -130,7 +138,7 @@ const Upload = function Upload(bucketName, opts) {
 
   if (!this.opts.aws.httpOptions) { this.opts.aws.httpOptions = {}; }
   if (!this.opts.aws.httpOptions.timeout) {
-    this.opts.aws.httpOptions.timeout = 10000;
+    this.opts.aws.httpOptions.timeout = 30000;
   }
 
   if (!this.opts.aws.maxRetries) { this.opts.aws.maxRetries = 3; }
