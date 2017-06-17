@@ -94,11 +94,14 @@ Image.prototype._upload = function _upload(dest, version, cb) {
 
     const format = extname(version.path).substr(1).toLowerCase();
 
+    const stat = fs.statSync(version.path);
+
     const options = {
       Key: `${dest}${version.suffix || ''}.${format}`,
       ACL: version.awsImageAcl,
-      Body: fs.createReadStream(version.path),
+      // Body: fs.createReadStream(version.path),
       ContentType: `image/${format === 'jpg' ? 'jpeg' : format}`,
+      ContentLength: stat.size,
     };
 
     if (version.awsImageExpires) {
@@ -109,17 +112,23 @@ Image.prototype._upload = function _upload(dest, version, cb) {
       options.CacheControl = `public, max-age=${version.awsImageMaxAge}`;
     }
 
-    this.upload.s3.putObject(options, (err, data) => {
-      if (err) { return cb(err); }
+    fs.readFile(version.path, (err2, body) => {
+      if (err2) { return cb(err2); }
 
-      version.etag = data.ETag;
-      version.key = options.Key;
+      options.Body = body;
 
-      if (this.upload.opts.url) {
-        version.url = this.upload.opts.url + options.Key;
-      }
+      this.upload.s3.upload(options, (err, data) => {
+        if (err) { return cb(err); }
 
-      return cb(null, version);
+        version.etag = data.ETag;
+        version.key = options.Key;
+
+        if (this.upload.opts.url) {
+          version.url = this.upload.opts.url + options.Key;
+        }
+
+        return cb(null, version);
+      });
     });
   } catch (e) {
     cb(e, null);
