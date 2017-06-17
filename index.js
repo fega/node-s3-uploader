@@ -100,8 +100,8 @@ Image.prototype._upload = function _upload(dest, version, cb) {
       Key: `${dest}${version.suffix || ''}.${format}`,
       ACL: version.awsImageAcl,
       // Body: fs.createReadStream(version.path),
-      ContentType: `image/${format === 'jpg' ? 'jpeg' : format}`,
-      ContentLength: stat.size,
+      //ContentType: `image/${format === 'jpg' ? 'jpeg' : format}`,
+      //ContentLength: stat.size,
     };
 
     if (version.awsImageExpires) {
