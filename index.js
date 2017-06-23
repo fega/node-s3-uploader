@@ -94,7 +94,6 @@ Image.prototype._upload = function _upload(dest, version, cb) {
 
     const format = extname(version.path).substr(1).toLowerCase();
 
-    const stat = fs.statSync(version.path);
 
     const options = {
       Key: `${dest}${version.suffix || ''}.${format}`,
@@ -111,24 +110,29 @@ Image.prototype._upload = function _upload(dest, version, cb) {
     if (version.awsImageMaxAge) {
       options.CacheControl = `public, max-age=${version.awsImageMaxAge}`;
     }
+    fs.exists(version.path, (fileExists) => {
+      if (!fileExists) {
+        cb('not exists', null);
+      } else {
+        fs.readFile(version.path, (err2, body) => {
+          if (err2) { return cb(err2); }
 
-    fs.readFile(version.path, (err2, body) => {
-      if (err2) { return cb(err2); }
+          options.Body = body;
 
-      options.Body = body;
+          this.upload.s3.upload(options, (err, data) => {
+            if (err) { return cb(err); }
 
-      this.upload.s3.upload(options, (err, data) => {
-        if (err) { return cb(err); }
+            version.etag = data.ETag;
+            version.key = options.Key;
 
-        version.etag = data.ETag;
-        version.key = options.Key;
+            if (this.upload.opts.url) {
+              version.url = this.upload.opts.url + options.Key;
+            }
 
-        if (this.upload.opts.url) {
-          version.url = this.upload.opts.url + options.Key;
-        }
-
-        return cb(null, version);
-      });
+            return cb(null, version);
+          });
+        });
+      }
     });
   } catch (e) {
     cb(e, null);
